@@ -1,3 +1,6 @@
+# InboxHunter API - NestJS + TypeORM
+# Multi-stage build for optimized production image
+
 FROM node:18-alpine AS builder
 
 WORKDIR /app
@@ -6,13 +9,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Copy source
+# Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Build
+# Build application
 RUN npm run build
 
 # Production image
@@ -22,12 +22,19 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy necessary files
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/prisma ./prisma
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
 
-# Run migrations and start
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# Copy necessary files from builder
+COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 
+USER nestjs
+
+EXPOSE 3001
+
+# TypeORM will auto-sync schema in development
+# For production, run migrations manually before deploying
+CMD ["node", "dist/main.js"]
