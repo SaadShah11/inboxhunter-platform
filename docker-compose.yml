@@ -1,57 +1,95 @@
+# InboxHunter Platform - Docker Compose
+# Single source of truth for all services
+#
+# Usage:
+#   Development: docker compose up postgres         (just database)
+#   Full stack:  docker compose --profile full up -d (all services)
+
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # ===========================================
+  # PostgreSQL Database (Always Docker)
+  # ===========================================
   postgres:
     image: postgres:16-alpine
     container_name: inboxhunter-db
+    restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: inboxhunter
+      POSTGRES_USER: ${POSTGRES_USER:-inboxhunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inboxhunter123}
+      POSTGRES_DB: ${POSTGRES_DB:-inboxhunter}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inboxhunter} -d ${POSTGRES_DB:-inboxhunter}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Backend API
+  # ===========================================
+  # Backend API - NestJS + TypeORM
+  # ===========================================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: inboxhunter-api
+    restart: always
+    profiles:
+      - full
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inboxhunter?schema=public
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      CORS_ORIGIN: http://localhost:3000
+      # TypeORM database config
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-inboxhunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inboxhunter123}
+      POSTGRES_DB: ${POSTGRES_DB:-inboxhunter}
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # Agent
+      AGENT_TOKEN_EXPIRES_IN: ${AGENT_TOKEN_EXPIRES_IN:-30d}
+      # AWS S3
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-inboxhunter-storage}
     ports:
-      - "3001:3001"
+      - "${API_PORT:-3001}:3001"
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
 
-  # Frontend Dashboard
+  # ===========================================
+  # Frontend Dashboard - Next.js
+  # ===========================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     container_name: inboxhunter-web
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3001
+    restart: always
+    profiles:
+      - full
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     depends_on:
       - backend
-    restart: unless-stopped
 
 volumes:
   postgres_data:
-
+    driver: local

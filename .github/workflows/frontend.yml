@@ -37,6 +37,8 @@ jobs:
       
       - name: Build
         run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
 
   docker:
     needs: lint-and-build
@@ -62,6 +64,7 @@ jobs:
           context: ./frontend
           push: true
           tags: ghcr.io/${{ github.repository }}/web:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.API_URL || 'http://localhost:3001' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-

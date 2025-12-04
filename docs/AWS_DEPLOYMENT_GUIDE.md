@@ -145,7 +145,32 @@ Complete step-by-step guide to deploy InboxHunter on AWS using the AWS Console (
    sudo apt update && sudo apt upgrade -y
    ```
 
-3. **Install Node.js 18**
+3. **Install Docker**
+   ```bash
+   # Install Docker
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+   
+   # Add your user to docker group (so you don't need sudo)
+   sudo usermod -aG docker ubuntu
+   
+   # Install Docker Compose
+   sudo apt install -y docker-compose-plugin
+   
+   # Verify installation
+   docker --version
+   docker compose version
+   
+   # IMPORTANT: Log out and back in for group changes to take effect
+   exit
+   ```
+   
+   Then SSH back in:
+   ```bash
+   ssh -i ~/Downloads/inboxhunter-key.pem ubuntu@YOUR_EC2_PUBLIC_IP
+   ```
+
+4. **Install Node.js 18**
    ```bash
    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
    sudo apt install -y nodejs
@@ -155,116 +180,118 @@ Complete step-by-step guide to deploy InboxHunter on AWS using the AWS Console (
    npm --version   # Should show 9.x.x or 10.x.x
    ```
 
-4. **Install PostgreSQL**
-   ```bash
-   sudo apt install -y postgresql postgresql-contrib
-   
-   # Start PostgreSQL
-   sudo systemctl start postgresql
-   sudo systemctl enable postgresql
-   
-   # Verify it's running
-   sudo systemctl status postgresql
-   ```
-
-5. **Configure PostgreSQL**
-   ```bash
-   # Switch to postgres user
-   sudo -u postgres psql
-   ```
-   
-   In the PostgreSQL prompt:
-   ```sql
-   -- Create database
-   CREATE DATABASE inboxhunter;
-   
-   -- Create user with password
-   CREATE USER inboxhunter_user WITH ENCRYPTED PASSWORD 'YourSecurePassword123!';
-   
-   -- Grant privileges
-   GRANT ALL PRIVILEGES ON DATABASE inboxhunter TO inboxhunter_user;
-   
-   -- Exit
-   \q
-   ```
-
-6. **Install PM2 (Process Manager)**
+5. **Install PM2 (Process Manager)**
    ```bash
    sudo npm install -g pm2
    ```
 
-7. **Install Git**
+6. **Install Git**
    ```bash
    sudo apt install -y git
    ```
 
 ---
 
-### Step 1.3: Deploy Backend
+### Step 1.3: Clone & Configure
 
 1. **Clone Your Repository**
    ```bash
    cd ~
    git clone https://github.com/YOUR_USERNAME/inboxhunter-platform.git
-   cd inboxhunter-platform/backend
+   cd inboxhunter-platform
    ```
 
-2. **Install Dependencies**
+2. **Create Environment File**
    ```bash
-   npm install
-   ```
-
-3. **Create Environment File**
-   ```bash
+   # Copy template
+   cp env.example .env
+   
+   # Edit with your values
    nano .env
    ```
    
-   Add the following (replace values):
+   Update the following values:
    ```env
+   # Database (change password!)
+   POSTGRES_USER=inboxhunter
+   POSTGRES_PASSWORD=YourSecurePassword123!
+   POSTGRES_DB=inboxhunter
+   
+   # Must match above credentials
+   DATABASE_URL="postgresql://inboxhunter:YourSecurePassword123!@localhost:5432/inboxhunter?schema=public"
+   
+   # Production settings
    NODE_ENV=production
-   PORT=3001
-   HOST=0.0.0.0
    
-   # Database - PostgreSQL on same server
-   DATABASE_URL="postgresql://inboxhunter_user:YourSecurePassword123!@localhost:5432/inboxhunter"
+   # JWT Secret - generate with: openssl rand -base64 32
+   JWT_SECRET="paste-your-generated-secret-here"
    
-   # JWT Secret - generate a random string
-   JWT_SECRET="your-super-secret-jwt-key-at-least-32-characters-long"
-   JWT_EXPIRES_IN="7d"
-   
-   # CORS - will update after Amplify deploy
+   # CORS - update after Amplify deploy
    CORS_ORIGIN="https://your-amplify-domain.amplifyapp.com"
    
-   # Agent token expiry
-   AGENT_TOKEN_EXPIRES_IN="30d"
+   # AWS S3 (add after creating IAM user in Part 4)
+   AWS_ACCESS_KEY_ID=""
+   AWS_SECRET_ACCESS_KEY=""
+   AWS_REGION="us-east-1"
+   S3_BUCKET="inboxhunter-storage"
    ```
    
    Save: `Ctrl+O`, `Enter`, `Ctrl+X`
 
-4. **Generate Prisma Client & Run Migrations**
+3. **Start PostgreSQL Container**
    ```bash
-   npx prisma generate
-   npx prisma migrate deploy
+   # Start PostgreSQL (uses docker-compose.yml)
+   docker compose up -d postgres
+   
+   # Verify it's running
+   docker ps
+   
+   # Check logs
+   docker logs inboxhunter-db
    ```
 
-5. **Build the Application**
+4. **Verify Database Connection**
+   ```bash
+   # Connect to PostgreSQL in Docker
+   docker exec -it inboxhunter-db psql -U inboxhunter -d inboxhunter
+   
+   # In psql prompt, test:
+   \dt    # List tables (empty for now)
+   \q     # Exit
+   ```
+
+---
+
+### Step 1.4: Deploy Backend
+
+1. **Install Dependencies**
+   ```bash
+   cd ~/inboxhunter-platform/backend
+   npm install
+   ```
+
+2. **Build the Application**
    ```bash
    npm run build
    ```
 
-6. **Start with PM2**
+3. **Start with PM2**
    ```bash
-   pm2 start dist/index.js --name "inboxhunter-api"
+   # TypeORM auto-syncs schema in development
+   # For production, you may want to run migrations first:
+   # npm run migration:run
+   
+   pm2 start dist/main.js --name "inboxhunter-api"
    
    # Save PM2 configuration
    pm2 save
    
    # Setup PM2 to start on boot
    pm2 startup
-   # Run the command it outputs
+   # Run the command it outputs (copy and run the sudo command)
    ```
 
-7. **Verify Backend is Running**
+6. **Verify Backend is Running**
    ```bash
    # Check PM2 status
    pm2 status
@@ -277,13 +304,13 @@ Complete step-by-step guide to deploy InboxHunter on AWS using the AWS Console (
    # Should return: {"status":"ok","timestamp":"..."}
    ```
 
-8. **Test from Browser**
+7. **Test from Browser**
    - Open: `http://YOUR_EC2_PUBLIC_IP:3001/health`
    - Should see JSON response
 
 ---
 
-### Step 1.4: Set Up Nginx (Reverse Proxy + SSL)
+### Step 1.5: Set Up Nginx (Reverse Proxy + SSL)
 
 1. **Install Nginx**
    ```bash
@@ -659,23 +686,59 @@ git pull origin main
 cd backend
 npm install
 npm run build
-npx prisma migrate deploy
+# TypeORM auto-syncs in dev, or run migrations for production:
+# npm run migration:run
 pm2 restart inboxhunter-api
 
 # Check status
 pm2 status
 ```
 
-### Database Management
+### Docker Auto-Start on Boot
 
 ```bash
-# Connect to PostgreSQL
-sudo -u postgres psql -d inboxhunter
+# Enable Docker to start on boot
+sudo systemctl enable docker
 
-# Common commands:
+# The PostgreSQL container has restart: always policy,
+# so it will auto-restart when Docker starts
+
+# Verify auto-restart policy
+docker inspect inboxhunter-db --format '{{.HostConfig.RestartPolicy.Name}}'
+# Should output: always
+```
+
+### Database Management (Docker PostgreSQL)
+
+```bash
+# All commands run from project root
+cd ~/inboxhunter-platform
+
+# Connect to PostgreSQL
+docker exec -it inboxhunter-db psql -U inboxhunter -d inboxhunter
+
+# Common psql commands:
 \dt                    # List tables
 SELECT * FROM "User";  # Query users
 \q                     # Exit
+
+# View logs
+docker logs -f inboxhunter-db
+
+# Restart database
+docker compose restart postgres
+
+# Stop database
+docker compose down
+
+# Start database
+docker compose up -d postgres
+
+# Backup database
+docker exec inboxhunter-db pg_dump -U inboxhunter inboxhunter > ~/backup-$(date +%Y%m%d).sql
+
+# Restore database
+cat ~/backup.sql | docker exec -i inboxhunter-db psql -U inboxhunter -d inboxhunter
 ```
 
 ### Amplify Redeployment
@@ -752,11 +815,21 @@ sudo systemctl status nginx
 ### Database connection issues
 
 ```bash
-# Check PostgreSQL is running
-sudo systemctl status postgresql
+# Check Docker container is running
+docker ps | grep inboxhunter-db
+
+# If not running, start it
+cd ~/inboxhunter-platform
+docker compose up -d postgres
+
+# Check container logs for errors
+docker logs inboxhunter-db --tail 50
 
 # Test connection
-psql -U inboxhunter_user -d inboxhunter -h localhost
+docker exec -it inboxhunter-db psql -U inboxhunter -d inboxhunter -c "SELECT 1"
+
+# Check if port 5432 is listening
+sudo netstat -tlnp | grep 5432
 ```
 
 ### CORS errors
@@ -788,13 +861,13 @@ psql -U inboxhunter_user -d inboxhunter -h localhost
 ## Next Steps
 
 1. ✅ Backend deployed on EC2
-2. ✅ Database running on EC2
+2. ✅ Database running in Docker on EC2
 3. ✅ Frontend deployed on Amplify
 4. ✅ S3 configured for storage
 5. ⬜ Set up custom domain
 6. ⬜ Configure SSL certificates
 7. ⬜ Set up monitoring (CloudWatch)
-8. ⬜ Configure backups
+8. ⬜ Configure automated database backups
 
 ---
 

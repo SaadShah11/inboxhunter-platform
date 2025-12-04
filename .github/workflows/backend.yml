@@ -19,6 +19,21 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
     steps:
       - uses: actions/checkout@v4
       
@@ -32,14 +47,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Generate Prisma client
-        run: npx prisma generate
-      
       - name: Lint
         run: npm run lint
       
       - name: Build
         run: npm run build
+      
+      - name: Test
+        run: npm run test
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+          JWT_SECRET: test-secret
 
   docker:
     needs: lint-and-test
@@ -67,4 +89,3 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
