@@ -8,10 +8,11 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import { AgentsService } from './agents.service';
 import { AgentStatus } from './entities/agent.entity';
 import { LogLevel } from './entities/agent-log.entity';
+import { ScrapedLinksService } from '../scraped-links/scraped-links.service';
 
 interface AuthenticatedSocket extends Socket {
   agentId?: string;
@@ -31,7 +32,11 @@ export class AgentsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private logger = new Logger('AgentsGateway');
   private connectedAgents = new Map<string, AuthenticatedSocket>();
 
-  constructor(private agentsService: AgentsService) {}
+  constructor(
+    private agentsService: AgentsService,
+    @Inject(forwardRef(() => ScrapedLinksService))
+    private scrapedLinksService: ScrapedLinksService,
+  ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
     this.logger.log(`Client attempting connection: ${client.id}`);
@@ -149,6 +154,38 @@ export class AgentsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     return { event: 'task:complete', data: { received: true } };
+  }
+
+  @SubscribeMessage('scrape:results')
+  async handleScrapeResults(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { links: any[]; count: number },
+  ) {
+    if (!client.userId) return;
+
+    this.logger.log(`Received ${data.count} scraped links from agent ${client.agentId}`);
+
+    try {
+      // Bulk create scraped links
+      const result = await this.scrapedLinksService.bulkCreate(client.userId, {
+        links: data.links,
+      });
+
+      this.logger.log(`Saved ${result.created} new links, ${result.duplicates} duplicates`);
+
+      // Notify user's dashboard
+      this.server.to(`user:${client.userId}`).emit('scrape:complete', {
+        agentId: client.agentId,
+        created: result.created,
+        duplicates: result.duplicates,
+        total: data.count,
+      });
+
+      return { event: 'scrape:results', data: { received: true, ...result } };
+    } catch (error) {
+      this.logger.error(`Failed to save scraped links: ${error}`);
+      return { event: 'scrape:results', data: { received: false, error: error.message } };
+    }
   }
 
   // Send task to specific agent

@@ -62,25 +62,25 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           title="Today's Signups"
-          value={data?.today.total || 0}
+          value={data?.today?.total ?? 0}
           icon={<Activity className="h-5 w-5" />}
           color="blue"
         />
         <StatCard
           title="Successful"
-          value={data?.today.successful || 0}
+          value={data?.today?.successful ?? 0}
           icon={<CheckCircle className="h-5 w-5" />}
           color="green"
         />
         <StatCard
           title="Success Rate"
-          value={`${data?.today.successRate || 0}%`}
+          value={`${data?.today?.successRate ?? 0}%`}
           icon={<TrendingUp className="h-5 w-5" />}
           color="purple"
         />
         <StatCard
           title="Active Agents"
-          value={data?.agents.filter(a => a.status === 'ONLINE' || a.status === 'RUNNING').length || 0}
+          value={Array.isArray(data?.agents) ? data.agents.filter(a => a.status === 'online' || a.status === 'busy').length : 0}
           icon={<Cpu className="h-5 w-5" />}
           color="orange"
         />
@@ -96,19 +96,19 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="p-4">
-            {data?.recentSignups.length === 0 ? (
+            {!Array.isArray(data?.recentSignups) || data.recentSignups.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 No signups yet. Start your first task!
               </p>
             ) : (
               <div className="space-y-3">
-                {data?.recentSignups.slice(0, 5).map((signup: any) => (
+                {data.recentSignups.slice(0, 5).map((signup: any) => (
                   <div key={signup.id} className="flex items-center gap-3">
                     <div className={cn(
                       "h-8 w-8 rounded-full flex items-center justify-center",
-                      signup.status === 'SUCCESS' ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
+                      signup.status === 'success' ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
                     )}>
-                      {signup.status === 'SUCCESS' ? (
+                      {signup.status === 'success' ? (
                         <CheckCircle className="h-4 w-4" />
                       ) : (
                         <XCircle className="h-4 w-4" />
@@ -139,7 +139,7 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="p-4">
-            {data?.agents.length === 0 ? (
+            {!Array.isArray(data?.agents) || data.agents.length === 0 ? (
               <div className="text-center py-8">
                 <Download className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground mb-3">No agents connected</p>
@@ -153,19 +153,19 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {data?.agents.map((agent: any) => (
+                {data.agents.map((agent: any) => (
                   <div key={agent.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition">
                     <div className={cn(
                       "h-3 w-3 rounded-full",
-                      agent.status === 'ONLINE' ? "bg-green-500" :
-                      agent.status === 'RUNNING' ? "bg-blue-500 animate-pulse" :
-                      agent.status === 'ERROR' ? "bg-red-500" :
+                      agent.status === 'online' ? "bg-green-500" :
+                      agent.status === 'busy' ? "bg-blue-500 animate-pulse" :
+                      agent.status === 'error' ? "bg-red-500" :
                       "bg-gray-500"
                     )} />
                     <div className="flex-1">
                       <p className="text-sm font-medium">{agent.name}</p>
                       <p className="text-xs text-muted-foreground capitalize">
-                        {agent.status.toLowerCase()}
+                        {agent.status || 'unknown'}
                       </p>
                     </div>
                     {agent.lastSeenAt && (

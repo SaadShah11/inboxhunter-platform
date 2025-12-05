@@ -13,7 +13,9 @@ import {
   User,
   LogOut,
   Menu,
-  X
+  X,
+  Download,
+  Link as LinkIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,9 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/agents", label: "Agents", icon: Cpu },
   { href: "/dashboard/tasks", label: "Tasks", icon: ListTodo },
+  { href: "/dashboard/scraped-links", label: "Scraped Links", icon: LinkIcon },
   { href: "/dashboard/signups", label: "Signups", icon: MailCheck },
+  { href: "/dashboard/download", label: "Download Agent", icon: Download },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

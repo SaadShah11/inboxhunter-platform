@@ -36,7 +36,20 @@ export default function SettingsPage() {
 
   const handleAddCredential = async () => {
     setSaving(true);
-    const { data, error } = await credentialsApi.create(newCred);
+    
+    // Transform data to match backend DTO
+    const credentialData = {
+      name: newCred.name,
+      firstName: newCred.firstName,
+      lastName: newCred.lastName,
+      email: newCred.email,
+      phone: newCred.phoneNumber 
+        ? `${newCred.phoneCountryCode}${newCred.phoneNumber}` 
+        : undefined,
+      isDefault: newCred.isDefault,
+    };
+    
+    const { data, error } = await credentialsApi.create(credentialData);
     if (data) {
       setShowAddModal(false);
       setNewCred({
@@ -121,9 +134,9 @@ export default function SettingsPage() {
                     <p className="text-sm text-muted-foreground">
                       {cred.firstName} {cred.lastName} • {cred.email}
                     </p>
-                    {cred.phoneFull && (
+                    {cred.phone && (
                       <p className="text-sm text-muted-foreground">
-                        {cred.phoneFull}
+                        {cred.phone}
                       </p>
                     )}
                   </div>
@@ -161,7 +174,7 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Credential Name
+                  Credential Name *
                 </label>
                 <input
                   type="text"
@@ -169,6 +182,7 @@ export default function SettingsPage() {
                   onChange={(e) => setNewCred({ ...newCred, name: e.target.value })}
                   className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="e.g., Marketing Leads"
+                  required
                 />
               </div>
 
@@ -259,7 +273,7 @@ export default function SettingsPage() {
               </button>
               <button
                 onClick={handleAddCredential}
-                disabled={saving || !newCred.firstName || !newCred.email}
+                disabled={saving || !newCred.name || !newCred.firstName || !newCred.email}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -9,6 +9,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { SignupsModule } from './signups/signups.module';
 import { CredentialsModule } from './credentials/credentials.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { ScrapedLinksModule } from './scraped-links/scraped-links.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { UploadsModule } from './uploads/uploads.module';
     SignupsModule,
     CredentialsModule,
     UploadsModule,
+    ScrapedLinksModule,
   ],
 })
 export class AppModule {}

@@ -38,31 +38,41 @@ export class UsersService {
       return null;
     }
 
-    const totalAgents = user.agents?.length || 0;
-    const onlineAgents =
-      user.agents?.filter((a) => a.status === 'online').length || 0;
-    const totalTasks = user.tasks?.length || 0;
-    const completedTasks =
-      user.tasks?.filter((t) => t.status === 'completed').length || 0;
-    const totalSignups = user.signups?.length || 0;
-    const successfulSignups =
-      user.signups?.filter((s) => s.status === 'success').length || 0;
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Filter today's signups
+    const todaySignups = user.signups?.filter((s) => {
+      const signupDate = new Date(s.createdAt);
+      return signupDate >= today && signupDate < tomorrow;
+    }) || [];
+
+    const todayTotal = todaySignups.length;
+    const todaySuccessful = todaySignups.filter((s) => s.status === 'success').length;
+    const successRate = todayTotal > 0 ? Math.round((todaySuccessful / todayTotal) * 100) : 0;
+
+    // Get recent signups (last 10)
+    const recentSignups = (user.signups || [])
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10);
+
+    // Get recent tasks (last 10)
+    const recentTasks = (user.tasks || [])
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10);
 
     return {
-      agents: {
-        total: totalAgents,
-        online: onlineAgents,
+      today: {
+        total: todayTotal,
+        successful: todaySuccessful,
+        successRate: successRate,
       },
-      tasks: {
-        total: totalTasks,
-        completed: completedTasks,
-        pending: totalTasks - completedTasks,
-      },
-      signups: {
-        total: totalSignups,
-        successful: successfulSignups,
-        failed: totalSignups - successfulSignups,
-      },
+      recentSignups: recentSignups,
+      recentTasks: recentTasks,
+      agents: user.agents || [],
     };
   }
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { AgentsController } from './agents.controller';
 import { AgentsGateway } from './agents.gateway';
 import { Agent } from './entities/agent.entity';
 import { AgentLog } from './entities/agent-log.entity';
+import { ScrapedLinksModule } from '../scraped-links/scraped-links.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AgentLog } from './entities/agent-log.entity';
       }),
       inject: [ConfigService],
     }),
+    forwardRef(() => ScrapedLinksModule),
   ],
   controllers: [AgentsController],
   providers: [AgentsService, AgentsGateway],

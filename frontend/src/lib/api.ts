@@ -136,3 +136,54 @@ export const credentials = {
     request<any>(`/api/credentials/${id}/default`, { method: 'POST' }),
 };
 
+// Scraped Links
+export const scrapedLinks = {
+  list: (status?: string) => {
+    const query = status ? `?status=${status}` : '';
+    return request<any[]>(`/api/scraped-links${query}`);
+  },
+  stats: () => request<any>('/api/scraped-links/stats'),
+  pending: () => request<any[]>('/api/scraped-links/pending'),
+  create: (data: any) =>
+    request<any>('/api/scraped-links', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  bulkCreate: (links: any[]) =>
+    request<{ created: number; duplicates: number }>('/api/scraped-links/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ links }),
+    }),
+  delete: (id: string) =>
+    request<any>(`/api/scraped-links/${id}`, { method: 'DELETE' }),
+  deleteAll: () =>
+    request<any>('/api/scraped-links', { method: 'DELETE' }),
+  
+  // Operations
+  startScrape: (keywords: string[], limit?: number, agentId?: string) =>
+    request<any>('/api/scraped-links/scrape/start', {
+      method: 'POST',
+      body: JSON.stringify({ keywords, limit, agentId }),
+    }),
+  startSignupSingle: (linkId: string, agentId?: string, credentialId?: string) =>
+    request<any>(`/api/scraped-links/signup/single/${linkId}`, {
+      method: 'POST',
+      body: JSON.stringify({ agentId, credentialId }),
+    }),
+  startSignupSelected: (linkIds: string[], agentId?: string, credentialId?: string) =>
+    request<any>('/api/scraped-links/signup/selected', {
+      method: 'POST',
+      body: JSON.stringify({ linkIds, agentId, credentialId }),
+    }),
+  startSignupAll: (agentId?: string, credentialId?: string) =>
+    request<any>('/api/scraped-links/signup/all', {
+      method: 'POST',
+      body: JSON.stringify({ agentId, credentialId }),
+    }),
+  addCustomLink: (url: string, startSignup?: boolean, agentId?: string, credentialId?: string) =>
+    request<any>('/api/scraped-links/custom', {
+      method: 'POST',
+      body: JSON.stringify({ url, startSignup, agentId, credentialId }),
+    }),
+};
+
