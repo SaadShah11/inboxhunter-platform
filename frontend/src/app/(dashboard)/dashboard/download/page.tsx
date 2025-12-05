@@ -1,368 +1,327 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Download,
   Monitor,
   Apple,
-  Terminal,
-  CheckCircle2,
+  Cpu,
   Copy,
+  Check,
   ExternalLink,
-  Loader2,
-  Info,
+  CheckCircle,
+  ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
-import { agentsApi } from '@/lib/api';
+import { agents as agentsApi } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui/toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
-interface DownloadInfo {
-  os: 'windows' | 'macos' | 'linux';
-  download_url: string;
-  filename: string;
-  size: number;
-}
+type Platform = 'windows' | 'macos' | 'linux';
 
-interface ReleaseInfo {
-  latest_version: string;
-  release_date: string;
-  downloads: DownloadInfo[];
-  release_notes?: string;
-}
-
-const platformConfig = {
-  windows: {
+const platforms: { id: Platform; name: string; icon: any; ext: string; description: string }[] = [
+  {
+    id: 'windows',
     name: 'Windows',
     icon: Monitor,
-    color: 'from-blue-500 to-blue-600',
-    description: 'Windows 10/11 (64-bit)',
-    instructions: [
-      'Download the installer (.exe)',
-      'Run the installer',
-      'Follow the setup wizard',
-      'Launch from Desktop or Start Menu',
-    ],
+    ext: '.exe',
+    description: 'Windows 10 or later',
   },
-  macos: {
+  {
+    id: 'macos',
     name: 'macOS',
     icon: Apple,
-    color: 'from-gray-700 to-gray-800',
-    description: 'macOS 10.14+ (Intel & Apple Silicon)',
-    instructions: [
-      'Download the DMG file',
-      'Open the DMG and drag to Applications',
-      'Right-click → Open (first time only)',
-      'Allow in Security preferences if needed',
-    ],
+    ext: '.dmg',
+    description: 'macOS 11 or later',
   },
-  linux: {
+  {
+    id: 'linux',
     name: 'Linux',
-    icon: Terminal,
-    color: 'from-orange-500 to-orange-600',
-    description: 'Ubuntu 20.04+, Debian, Fedora',
-    instructions: [
-      'Download the AppImage',
-      'Make it executable: chmod +x *.AppImage',
-      'Run: ./InboxHunterAgent*.AppImage',
-      'Or use AppImageLauncher for integration',
-    ],
+    icon: Cpu,
+    ext: '.AppImage',
+    description: 'Ubuntu 20.04 or later',
   },
-};
+];
 
-function detectOS(): 'windows' | 'macos' | 'linux' {
-  if (typeof window === 'undefined') return 'windows';
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes('win')) return 'windows';
-  if (ua.includes('mac')) return 'macos';
-  return 'linux';
-}
-
-function formatSize(bytes: number): string {
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(1)} MB`;
-}
+const steps = [
+  { title: 'Download the Agent', description: 'Get the installer for your platform' },
+  { title: 'Generate Token', description: 'Create a registration token' },
+  { title: 'Install & Configure', description: 'Run installer and enter token' },
+  { title: 'Start Automating', description: 'Agent connects automatically' },
+];
 
 export default function DownloadPage() {
-  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [detectedOS, setDetectedOS] = useState<'windows' | 'macos' | 'linux'>('windows');
-  const [registrationToken, setRegistrationToken] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(false);
+  const { toast } = useToast();
+  
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform>('windows');
+  const [token, setToken] = useState('');
+  const [generatingToken, setGeneratingToken] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setDetectedOS(detectOS());
-    fetchReleaseInfo();
+    // Detect user's platform
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes('mac')) {
+      setSelectedPlatform('macos');
+    } else if (userAgent.includes('linux')) {
+      setSelectedPlatform('linux');
+    } else {
+      setSelectedPlatform('windows');
+    }
   }, []);
 
-  const fetchReleaseInfo = async () => {
-    try {
-      const response = await fetch('/api/agents/releases');
-      if (response.ok) {
-        const data = await response.json();
-        setReleaseInfo(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch release info:', error);
-    } finally {
-      setLoading(false);
+  const handleGenerateToken = async () => {
+    setGeneratingToken(true);
+    const { data, error } = await agentsApi.getRegistrationToken();
+
+    if (data?.token) {
+      setToken(data.token);
+      toast({ type: 'success', title: 'Token generated!', description: 'Copy it and use it during installation.' });
+    } else {
+      toast({ type: 'error', title: 'Failed to generate token', description: error });
     }
+    setGeneratingToken(false);
   };
 
-  const generateToken = async () => {
-    setTokenLoading(true);
-    try {
-      const { data, error } = await agentsApi.getRegistrationToken();
-      if (data?.token) {
-        setRegistrationToken(data.token);
-      }
-    } catch (error) {
-      console.error('Failed to generate token:', error);
-    } finally {
-      setTokenLoading(false);
-    }
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({ type: 'success', title: 'Token copied!' });
   };
 
-  const copyToken = () => {
-    if (registrationToken) {
-      navigator.clipboard.writeText(registrationToken);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownload = (url: string) => {
-    window.open(url, '_blank');
-  };
+  const selectedPlatformInfo = platforms.find((p) => p.id === selectedPlatform)!;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
-      <div className="text-center space-y-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg">
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
           <Download className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-3xl font-bold text-gray-900">Download InboxHunter Agent</h1>
-        <p className="text-gray-600 max-w-2xl mx-auto">
-          The InboxHunter Agent runs on your computer and handles browser automation tasks.
-          Download the agent for your operating system and follow the setup instructions.
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Download Agent</h1>
+        <p className="text-gray-500 max-w-xl mx-auto">
+          Install the InboxHunter Agent on your computer to start automating email signups.
         </p>
-        {releaseInfo && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full text-sm font-medium">
-            <CheckCircle2 className="w-4 h-4" />
-            Latest Version: {releaseInfo.latest_version}
-          </div>
-        )}
       </div>
 
-      {/* Download Cards */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {(['windows', 'macos', 'linux'] as const).map((os) => {
-          const config = platformConfig[os];
-          const Icon = config.icon;
-          const download = releaseInfo?.downloads.find((d) => d.os === os);
-          const isRecommended = os === detectedOS;
-
-          return (
-            <div
-              key={os}
-              className={`relative bg-white rounded-2xl shadow-sm border-2 transition-all hover:shadow-lg ${
-                isRecommended ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-gray-100'
-              }`}
-            >
-              {isRecommended && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-500 text-white text-xs font-semibold rounded-full">
-                  Recommended
-                </div>
-              )}
-
-              <div className="p-6 space-y-4">
-                {/* Platform Header */}
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${config.color} flex items-center justify-center`}
-                  >
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{config.name}</h3>
-                    <p className="text-sm text-gray-500">{config.description}</p>
-                  </div>
-                </div>
-
-                {/* Download Info */}
-                {download && (
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">{download.filename}</span>
-                    <span className="mx-2">•</span>
-                    <span>{formatSize(download.size)}</span>
-                  </div>
-                )}
-
-                {/* Download Button */}
-                <button
-                  onClick={() => download && handleDownload(download.download_url)}
-                  disabled={!download || loading}
-                  className={`w-full py-3 px-4 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2 ${
-                    isRecommended
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700'
-                      : 'bg-gray-800 hover:bg-gray-900'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5" />
-                      Download
-                    </>
-                  )}
-                </button>
-
-                {/* Instructions */}
-                <div className="pt-4 border-t border-gray-100">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Installation</h4>
-                  <ol className="text-sm text-gray-500 space-y-1">
-                    {config.instructions.map((step, i) => (
-                      <li key={i} className="flex gap-2">
-                        <span className="text-gray-400">{i + 1}.</span>
-                        {step}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
+      {/* Steps */}
+      <div className="flex items-center justify-center gap-2 py-4 overflow-x-auto">
+        {steps.map((step, i) => (
+          <div key={i} className="flex items-center">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 whitespace-nowrap">
+              <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                {i + 1}
               </div>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{step.title}</span>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Registration Token Section */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-6 border border-indigo-100">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Info className="w-5 h-5 text-indigo-600" />
-          </div>
-          <div className="flex-1 space-y-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">Registration Token</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                After downloading, you'll need a registration token to connect your agent to this
-                account. Generate one below and use it during the agent setup.
-              </p>
-            </div>
-
-            {registrationToken ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200">
-                  <code className="flex-1 text-sm font-mono text-gray-800 break-all">
-                    {registrationToken}
-                  </code>
-                  <button
-                    onClick={copyToken}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="Copy to clipboard"
-                  >
-                    {copied ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <Copy className="w-5 h-5 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500">
-                  This token expires in 1 hour. Run the agent with{' '}
-                  <code className="bg-gray-100 px-1 rounded">--register</code> and paste this token
-                  when prompted.
-                </p>
-              </div>
-            ) : (
-              <button
-                onClick={generateToken}
-                disabled={tokenLoading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-              >
-                {tokenLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  'Generate Registration Token'
-                )}
-              </button>
+            {i < steps.length - 1 && (
+              <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 mx-1 flex-shrink-0" />
             )}
           </div>
-        </div>
+        ))}
       </div>
 
-      {/* Setup Steps */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Quick Start Guide</h2>
-
-        <div className="grid md:grid-cols-4 gap-6">
-          {[
-            {
-              step: 1,
-              title: 'Download',
-              description: 'Download the agent for your operating system above',
-            },
-            {
-              step: 2,
-              title: 'Install',
-              description: 'Run the installer and follow the prompts',
-            },
-            {
-              step: 3,
-              title: 'Configure',
-              description: 'Add your OpenAI API key and credentials',
-            },
-            {
-              step: 4,
-              title: 'Connect',
-              description: 'Register with your token and start automating',
-            },
-          ].map(({ step, title, description }) => (
-            <div key={step} className="text-center">
-              <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold mx-auto mb-3">
-                {step}
-              </div>
-              <h3 className="font-semibold text-gray-900">{title}</h3>
-              <p className="text-sm text-gray-500 mt-1">{description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Release Notes */}
-      {releaseInfo?.release_notes && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Release Notes</h2>
-          <div className="prose prose-sm prose-gray max-w-none">
-            <pre className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap">
-              {releaseInfo.release_notes}
-            </pre>
+      {/* Platform Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Choose Your Platform</CardTitle>
+          <CardDescription>Select your operating system to download the appropriate installer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-3 gap-4">
+            {platforms.map((platform) => (
+              <button
+                key={platform.id}
+                onClick={() => setSelectedPlatform(platform.id)}
+                className={cn(
+                  'p-4 rounded-xl border-2 text-left transition-all',
+                  selectedPlatform === platform.id
+                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                    : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
+                )}
+              >
+                <platform.icon
+                  className={cn(
+                    'w-8 h-8 mb-3',
+                    selectedPlatform === platform.id ? 'text-indigo-500' : 'text-gray-400'
+                  )}
+                />
+                <p className="font-semibold text-gray-900 dark:text-white">{platform.name}</p>
+                <p className="text-sm text-gray-500">{platform.description}</p>
+              </button>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* Help Links */}
-      <div className="flex items-center justify-center gap-6 text-sm">
-        <a
-          href="https://github.com/YOUR_ORG/inboxhunter-agent/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-gray-500 hover:text-indigo-600 transition-colors"
-        >
-          Report an Issue
-          <ExternalLink className="w-3 h-3" />
-        </a>
-        <a
-          href="https://docs.inboxhunter.io"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-gray-500 hover:text-indigo-600 transition-colors"
-        >
-          Documentation
-          <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
+          <div className="mt-6 flex flex-col sm:flex-row items-center gap-4">
+            <Button
+              size="lg"
+              className="w-full sm:w-auto"
+              icon={<Download className="w-5 h-5" />}
+              onClick={() => {
+                // TODO: Actual download link
+                toast({ type: 'info', title: 'Download starting...', description: `InboxHunter Agent${selectedPlatformInfo.ext}` });
+              }}
+            >
+              Download for {selectedPlatformInfo.name}
+            </Button>
+            <span className="text-sm text-gray-500">
+              InboxHunterAgent{selectedPlatformInfo.ext} · v1.0.0
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Token Generation */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Registration Token</CardTitle>
+          <CardDescription>Generate a token to connect your agent to your account</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!token ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <Button onClick={handleGenerateToken} loading={generatingToken}>
+                Generate Registration Token
+              </Button>
+              <p className="text-sm text-gray-500">
+                You'll need this token during agent installation
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-emerald-700 dark:text-emerald-400">Token generated!</p>
+                    <p className="text-sm text-emerald-600 dark:text-emerald-500 mt-1">
+                      This token expires in 24 hours. Copy it now.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Your Registration Token
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={token}
+                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+                  />
+                  <Button onClick={handleCopyToken} icon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}>
+                    {copied ? 'Copied!' : 'Copy'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Installation Instructions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Installation Instructions</CardTitle>
+          <CardDescription>Follow these steps for {selectedPlatformInfo.name}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {selectedPlatform === 'windows' && (
+              <>
+                <Step number={1} title="Run the Installer">
+                  Double-click <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm">InboxHunterAgent.exe</code> to start installation.
+                </Step>
+                <Step number={2} title="Follow Setup Wizard">
+                  Accept the license agreement and choose installation directory.
+                </Step>
+                <Step number={3} title="Enter Registration Token">
+                  Paste your registration token when prompted to connect the agent.
+                </Step>
+                <Step number={4} title="Start Automating">
+                  The agent will appear in your system tray and connect automatically.
+                </Step>
+              </>
+            )}
+
+            {selectedPlatform === 'macos' && (
+              <>
+                <Step number={1} title="Open the DMG File">
+                  Double-click the downloaded <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm">.dmg</code> file.
+                </Step>
+                <Step number={2} title="Drag to Applications">
+                  Drag the InboxHunter Agent to your Applications folder.
+                </Step>
+                <Step number={3} title="Open the Agent">
+                  Right-click and select "Open" to bypass Gatekeeper on first launch.
+                </Step>
+                <Step number={4} title="Enter Registration Token">
+                  Paste your token in the configuration dialog.
+                </Step>
+              </>
+            )}
+
+            {selectedPlatform === 'linux' && (
+              <>
+                <Step number={1} title="Make Executable">
+                  <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                    chmod +x InboxHunterAgent.AppImage
+                  </code>
+                </Step>
+                <Step number={2} title="Run the AppImage">
+                  <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                    ./InboxHunterAgent.AppImage
+                  </code>
+                </Step>
+                <Step number={3} title="Configure Token">
+                  Enter your registration token when prompted.
+                </Step>
+                <Step number={4} title="Start Automating">
+                  The agent will connect to your account automatically.
+                </Step>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Help */}
+      <Card className="border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <AlertCircle className="w-6 h-6 text-indigo-500 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Need help?</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-3">
+                Check out our documentation or contact support if you're having trouble with installation.
+              </p>
+              <Button variant="secondary" size="sm" icon={<ExternalLink className="w-4 h-4" />}>
+                View Documentation
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
+function Step({ number, title, children }: { number: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-4">
+      <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+        <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">{number}</span>
+      </div>
+      <div>
+        <p className="font-medium text-gray-900 dark:text-white">{title}</p>
+        <p className="text-sm text-gray-500 mt-0.5">{children}</p>
+      </div>
+    </div>
+  );
+}

@@ -37,31 +37,42 @@ async function request<T>(
 
 // Auth
 export const auth = {
-  signup: (email: string, password: string, name?: string) =>
+  signup: (data: { email: string; password: string; name?: string }) =>
     request<{ user: any; token: string }>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify(data),
     }),
     
-  login: (email: string, password: string) =>
+  login: (data: { email: string; password: string }) =>
     request<{ user: any; token: string }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(data),
     }),
     
   me: () => request<any>('/api/auth/me'),
 };
 
+// Alias for auth
+export const authApi = auth;
+
 // Users
 export const users = {
   profile: () => request<any>('/api/users/profile'),
   dashboard: () => request<any>('/api/users/dashboard'),
-  updateProfile: (data: any) =>
+  updateProfile: (data: { name?: string; email?: string }) =>
     request<any>('/api/users/profile', {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    request<any>('/api/users/password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
+
+// Alias for users
+export const usersApi = users;
 
 // Agents
 export const agents = {
@@ -83,7 +94,24 @@ export const agents = {
     request<{ token: string }>('/api/agents/registration-token', {
       method: 'POST',
     }),
+  getLogs: (id: string, limit?: number) =>
+    request<any[]>(`/api/agents/${id}/logs${limit ? `?limit=${limit}` : ''}`),
+  getConnected: () =>
+    request<{ connectedAgents: string[] }>('/api/agents/connected'),
+  stopTask: (agentId: string, taskId: string) =>
+    request<{ success: boolean }>(`/api/agents/${agentId}/command/stop`, {
+      method: 'POST',
+      body: JSON.stringify({ taskId }),
+    }),
+  cancelTask: (agentId: string, taskId: string) =>
+    request<{ success: boolean }>(`/api/agents/${agentId}/command/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ taskId }),
+    }),
 };
+
+// Alias for agents
+export const agentsApi = agents;
 
 // Tasks
 export const tasks = {
@@ -135,6 +163,9 @@ export const credentials = {
   setDefault: (id: string) =>
     request<any>(`/api/credentials/${id}/default`, { method: 'POST' }),
 };
+
+// Alias for credentials
+export const credentialsApi = credentials;
 
 // Scraped Links
 export const scrapedLinks = {

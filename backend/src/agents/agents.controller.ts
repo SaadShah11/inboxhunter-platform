@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AgentsService } from './agents.service';
+import { AgentsGateway } from './agents.gateway';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
@@ -22,7 +23,10 @@ import { CheckVersionDto, VersionResponseDto, AgentReleasesDto } from './dto/age
 @ApiTags('agents')
 @Controller('api/agents')
 export class AgentsController {
-  constructor(private readonly agentsService: AgentsService) {}
+  constructor(
+    private readonly agentsService: AgentsService,
+    private readonly agentsGateway: AgentsGateway,
+  ) {}
 
   // ============================================
   // PUBLIC ENDPOINTS (No Auth Required)
@@ -109,6 +113,41 @@ export class AgentsController {
   @ApiOperation({ summary: 'Delete an agent' })
   async remove(@CurrentUser() user: User, @Param('id') id: string) {
     return this.agentsService.delete(id, user.id);
+  }
+
+  @Post(':id/command/stop')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Stop current task on agent' })
+  async stopTask(
+    @CurrentUser() user: User,
+    @Param('id') agentId: string,
+    @Body() body: { taskId: string },
+  ) {
+    const success = this.agentsGateway.sendStopCommand(agentId, body.taskId);
+    return { success, message: success ? 'Stop command sent' : 'Agent not connected' };
+  }
+
+  @Post(':id/command/cancel')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancel task on agent' })
+  async cancelTask(
+    @CurrentUser() user: User,
+    @Param('id') agentId: string,
+    @Body() body: { taskId: string },
+  ) {
+    const success = this.agentsGateway.sendCancelCommand(agentId, body.taskId);
+    return { success, message: success ? 'Cancel command sent' : 'Agent not connected' };
+  }
+
+  @Get('connected')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of connected agents' })
+  async getConnectedAgents(@CurrentUser() user: User) {
+    const agentIds = this.agentsGateway.getConnectedAgents(user.id);
+    return { connectedAgents: agentIds };
   }
 }
 

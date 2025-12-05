@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AgentsService } from './agents.service';
 import { AgentsController } from './agents.controller';
 import { AgentsGateway } from './agents.gateway';
+import { DashboardGateway } from './dashboard.gateway';
 import { Agent } from './entities/agent.entity';
 import { AgentLog } from './entities/agent-log.entity';
 import { ScrapedLinksModule } from '../scraped-links/scraped-links.module';
@@ -22,11 +23,11 @@ import { ScrapedLinksModule } from '../scraped-links/scraped-links.module';
       }),
       inject: [ConfigService],
     }),
+    ConfigModule,
     forwardRef(() => ScrapedLinksModule),
   ],
   controllers: [AgentsController],
-  providers: [AgentsService, AgentsGateway],
-  exports: [AgentsService, AgentsGateway],
+  providers: [AgentsService, AgentsGateway, DashboardGateway],
+  exports: [AgentsService, AgentsGateway, DashboardGateway],
 })
 export class AgentsModule {}
-
