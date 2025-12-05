@@ -6,12 +6,14 @@ interface User {
   email: string;
   name?: string;
   plan: string;
+  avatar?: string;
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
   setAuth: (user: User, token: string) => void;
+  updateUser: (updates: Partial<User>) => void;
   clearAuth: () => void;
   isAuthenticated: () => boolean;
 }
@@ -24,6 +26,12 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (user, token) => {
         localStorage.setItem('token', token);
         set({ user, token });
+      },
+      updateUser: (updates) => {
+        const currentUser = get().user;
+        if (currentUser) {
+          set({ user: { ...currentUser, ...updates } });
+        }
       },
       clearAuth: () => {
         localStorage.removeItem('token');
@@ -57,4 +65,3 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   setAgents: (agents) => set({ agents }),
   setRecentSignups: (signups) => set({ recentSignups: signups }),
 }));
-
